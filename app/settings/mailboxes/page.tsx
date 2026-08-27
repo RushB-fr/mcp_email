@@ -40,6 +40,10 @@ export default async function MailboxesPage() {
         <MailboxesCard
           mailboxes={mailboxes}
           organizations={orgsForSharing}
+          defaultHosts={{
+            imapHost: process.env.DEFAULT_IMAP_HOST,
+            smtpHost: process.env.DEFAULT_SMTP_HOST,
+          }}
           dict={{
             common: dict.common,
             mailboxes: dict.settings.mailboxes,

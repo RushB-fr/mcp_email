@@ -66,7 +66,7 @@ export const en: Dictionary = {
     },
     setup: {
       passwordLabel: "Password (IMAP/SMTP)",
-      serverSettingsSummary: "Server settings (default: OVH)",
+      serverSettingsSummary: "Server settings (IMAP/SMTP)",
       imapHostLabel: "IMAP host",
       imapPortLabel: "IMAP port",
       imapSecureLabel: "IMAP over SSL",
@@ -278,7 +278,7 @@ export const en: Dictionary = {
 
   mail: {
     authFailed:
-      "Authentication rejected by the mail server: the stored password is probably no longer valid (changed on OVH's side?). Go to Settings to update it.",
+      "Authentication rejected by the mail server: the stored password is probably no longer valid (changed with your mail provider?). Go to Settings to update it.",
     connectionError: "Error connecting to the mailbox.",
     imapConnectionFailed: (msg: string) => `IMAP connection failed: ${msg}`,
     smtpConnectionFailed: (msg: string) => `SMTP connection failed: ${msg}`,

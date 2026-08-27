@@ -32,12 +32,22 @@ type Props = {
   /** Editing an existing mailbox (credentials update) vs attaching a brand new one. */
   mailboxId?: string;
   defaultValues?: DefaultValues;
+  /**
+   * Pre-fills the IMAP/SMTP host fields for a brand new mailbox (ignored
+   * once `defaultValues` already has a real host, i.e. when editing an
+   * existing mailbox). Sourced server-side from DEFAULT_IMAP_HOST /
+   * DEFAULT_SMTP_HOST (see .env.example) rather than hardcoded to any one
+   * provider - a self-hosted instance can set these to whatever its own
+   * users' mailboxes actually run on; left unset, the fields are just
+   * blank and every user types their own.
+   */
+  defaultHosts?: { imapHost?: string; smtpHost?: string };
   onSuccess?: () => void;
   dict: Pick<Dictionary, "common"> & { auth: { setup: Dictionary["auth"]["setup"] } };
 };
 
 /** Attaches a new mailbox to the logged-in user, or edits an existing one's credentials (mailboxId given) - see lib/actions/setup.ts. */
-export function SetupForm({ mailboxId, defaultValues, onSuccess, dict }: Props) {
+export function SetupForm({ mailboxId, defaultValues, defaultHosts, onSuccess, dict }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -90,7 +100,7 @@ export function SetupForm({ mailboxId, defaultValues, onSuccess, dict }: Props) 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="imapHost">{dict.auth.setup.imapHostLabel}</Label>
-              <Input id="imapHost" name="imapHost" defaultValue={defaultValues?.imapHost ?? "imap.mail.ovh.net"} required />
+              <Input id="imapHost" name="imapHost" defaultValue={defaultValues?.imapHost ?? defaultHosts?.imapHost ?? ""} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="imapPort">{dict.auth.setup.imapPortLabel}</Label>
@@ -115,7 +125,7 @@ export function SetupForm({ mailboxId, defaultValues, onSuccess, dict }: Props) 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="smtpHost">{dict.auth.setup.smtpHostLabel}</Label>
-              <Input id="smtpHost" name="smtpHost" defaultValue={defaultValues?.smtpHost ?? "smtp.mail.ovh.net"} required />
+              <Input id="smtpHost" name="smtpHost" defaultValue={defaultValues?.smtpHost ?? defaultHosts?.smtpHost ?? ""} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtpPort">{dict.auth.setup.smtpPortLabel}</Label>

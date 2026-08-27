@@ -43,10 +43,12 @@ type MailboxesCardDict = {
 export function MailboxesCard({
   mailboxes,
   organizations,
+  defaultHosts,
   dict,
 }: {
   mailboxes: Mailbox[];
   organizations: { id: string; name: string }[];
+  defaultHosts?: { imapHost?: string; smtpHost?: string };
   dict: MailboxesCardDict;
 }) {
   const [adding, setAdding] = useState(false);
@@ -180,7 +182,11 @@ export function MailboxesCard({
 
       {adding ? (
         <div className="space-y-3 rounded-lg border border-border p-3">
-          <SetupForm onSuccess={() => setAdding(false)} dict={{ common: dict.common, auth: dict.auth }} />
+          <SetupForm
+            onSuccess={() => setAdding(false)}
+            defaultHosts={defaultHosts}
+            dict={{ common: dict.common, auth: dict.auth }}
+          />
           <Button type="button" variant="outline" size="sm" onClick={() => setAdding(false)}>
             {dict.common.cancel}
           </Button>

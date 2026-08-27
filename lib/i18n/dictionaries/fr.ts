@@ -74,7 +74,7 @@ export const fr = {
     },
     setup: {
       passwordLabel: "Mot de passe (IMAP/SMTP)",
-      serverSettingsSummary: "Paramètres serveur (par défaut : OVH)",
+      serverSettingsSummary: "Paramètres serveur (IMAP/SMTP)",
       imapHostLabel: "Hôte IMAP",
       imapPortLabel: "Port IMAP",
       imapSecureLabel: "IMAP en SSL",
@@ -286,7 +286,7 @@ export const fr = {
 
   mail: {
     authFailed:
-      "Authentification refusée par le serveur mail : le mot de passe enregistré n'est probablement plus valide (changé côté OVH ?). Va sur Réglages pour le mettre à jour.",
+      "Authentification refusée par le serveur mail : le mot de passe enregistré n'est probablement plus valide (changé chez votre hébergeur mail ?). Va sur Réglages pour le mettre à jour.",
     connectionError: "Erreur de connexion à la boîte mail.",
     imapConnectionFailed: (msg: string) => `Connexion IMAP impossible : ${msg}`,
     smtpConnectionFailed: (msg: string) => `Connexion SMTP impossible : ${msg}`,
