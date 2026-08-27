@@ -1,0 +1,368 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  MEMBER
+}
+
+/// Pure identity, decoupled from any mailbox. Logs in via credentials
+/// (bcrypt-hashed password, see passwordHash) or via Google/GitHub OAuth
+/// (see Account below - Auth.js's own linking table, unrelated to mailboxes
+/// despite the name collision with the old business concept it replaces).
+/// A User owns zero or more Mailbox rows and can additionally reach mailboxes
+/// shared through Organization membership (see lib/mail/mailbox.ts, which
+/// centralizes that resolution).
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  /// Null if this user only ever signs in via an OAuth provider.
+  passwordHash     String?
+  /// Set once the signup verification email is confirmed (credentials
+  /// signup only - OAuth providers already vouch for the email). Login via
+  /// credentials is blocked while this is null.
+  emailVerified    DateTime?
+  name             String?
+  image            String?
+  /// The mailbox MCP tools default to when a call doesn't name one
+  /// explicitly. Auto-set to the first mailbox this user gets access to
+  /// (owned or shared); editable from Réglages.
+  defaultMailboxId String?
+  /// Static bearer token for the MCP server URL, scoped to this identity as
+  /// a whole - see lib/mail/mailbox.ts's listAccessibleMailboxes (own
+  /// mailboxes + anything reachable via an organization). One token per
+  /// account, not per mailbox: it used to live on Mailbox, which meant a
+  /// user with several mailboxes held several functionally-identical
+  /// tokens (each already granted full-account access - see route.ts) for
+  /// no reason. Generated at signup (createUser), regenerated from
+  /// Réglages > Applications.
+  mcpToken         String    @unique
+  createdAt        DateTime  @default(now())
+
+  accounts Account[]
+  sessions Session[]
+
+  mailboxes      Mailbox[] @relation("MailboxOwner")
+  defaultMailbox Mailbox?  @relation("DefaultMailbox", fields: [defaultMailboxId], references: [id], onDelete: SetNull)
+
+  organizationsCreated Organization[]       @relation("OrganizationCreator")
+  memberships          OrganizationMember[]
+
+  authorizationCodes OAuthAuthorizationCode[]
+  refreshTokens      OAuthRefreshToken[]
+
+  @@map("users")
+}
+
+/// Auth.js/@auth/prisma-adapter standard model: one row per (provider,
+/// providerAccountId) OAuth link for a User. Session strategy stays JWT
+/// (see lib/auth/auth.config.ts) - this table (plus Session below) is only
+/// used by the adapter to persist OAuth account linking.
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+/// Auth.js/@auth/prisma-adapter standard model. Not actually read for
+/// authorization (session strategy is JWT), but the Prisma adapter requires
+/// it to exist for OAuth account linking to work.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+/// Auth.js/@auth/prisma-adapter standard model. Used for credentials signup
+/// email verification (identifier = email, token = random). Not currently
+/// used for magic-link sign-in (no Email provider is configured).
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+/// One IMAP/SMTP mailbox connection. Owned by whichever User attached and
+/// live-tested it (userId) - that's the only proof of ownership required,
+/// same as before. Not globally unique on email: two different Users can
+/// each attach the same address if they each hold working credentials for
+/// it, hence the unique constraint is scoped to (userId, email) rather than
+/// email alone.
+model Mailbox {
+  id                String   @id @default(cuid())
+  userId            String
+  email             String
+  encryptedPassword String
+  imapHost          String
+  imapPort          Int      @default(993)
+  imapSecure        Boolean  @default(true)
+  smtpHost          String
+  smtpPort          Int      @default(465)
+  smtpSecure        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  owner User @relation("MailboxOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Users for whom this is currently the default mailbox.
+  defaultForUsers User[] @relation("DefaultMailbox")
+
+  organizationShares OrganizationMailbox[]
+  directGrants       OrganizationMailboxGrant[]
+
+  @@unique([userId, email])
+  @@map("mailboxes")
+}
+
+/// An organization: a group of Users who can share Mailboxes with each
+/// other under granular access control (see OrganizationMember,
+/// OrganizationMailbox, MailboxGroup, OrganizationMailboxGrant). Unrelated
+/// to the platform-level Invite below, which only gates User creation.
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  createdBy User @relation("OrganizationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  members   OrganizationMember[]
+  mailboxes OrganizationMailbox[]
+  groups    MailboxGroup[]
+  invites   OrganizationInvite[]
+
+  @@map("organizations")
+}
+
+/// A User's membership in an Organization. OWNER: full access to every
+/// mailbox shared in the org, no explicit grant needed. MEMBER: only the
+/// mailboxes covered by an OrganizationMailboxGrant (direct or via a
+/// MailboxGroup) - see lib/mail/mailbox.ts for the resolution logic. The
+/// creator of the org is automatically its first OWNER.
+model OrganizationMember {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  grants OrganizationMailboxGrant[]
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+/// Shares a Mailbox into an Organization. The mailbox keeps its own owner
+/// (Mailbox.userId) even once shared - this table only records that it's
+/// visible/grantable within this org.
+model OrganizationMailbox {
+  id             String   @id @default(cuid())
+  organizationId String
+  mailboxId      String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mailbox      Mailbox      @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  groupMemberships MailboxGroupMailbox[]
+
+  @@unique([organizationId, mailboxId])
+  @@map("organization_mailboxes")
+}
+
+/// A named group of mailboxes within an org, for granting access to several
+/// boxes at once - and dynamically to whatever is added to the group later
+/// (see OrganizationMailboxGrant.mailboxGroupId).
+model MailboxGroup {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  mailboxes    MailboxGroupMailbox[]
+  grants       OrganizationMailboxGrant[]
+
+  @@map("mailbox_groups")
+}
+
+/// Joins a MailboxGroup to a mailbox already shared in the same
+/// organization (via OrganizationMailbox, not Mailbox directly) - that join
+/// enforces at the schema level that a group can only ever contain
+/// mailboxes already shared in its own org, since an OrganizationMailbox
+/// row is itself scoped to one organization.
+model MailboxGroupMailbox {
+  id                    String   @id @default(cuid())
+  mailboxGroupId        String
+  organizationMailboxId String
+  createdAt             DateTime @default(now())
+
+  group               MailboxGroup        @relation(fields: [mailboxGroupId], references: [id], onDelete: Cascade)
+  organizationMailbox OrganizationMailbox @relation(fields: [organizationMailboxId], references: [id], onDelete: Cascade)
+
+  @@unique([mailboxGroupId, organizationMailboxId])
+  @@map("mailbox_group_mailboxes")
+}
+
+/// Grants access to exactly one mailbox or one mailbox group (never both,
+/// enforced by a CHECK constraint added in the migration and re-validated
+/// in lib/actions/organization.ts), targeting EITHER an already-enrolled
+/// OrganizationMember OR a still-pending OrganizationInvite - also exactly
+/// one of the two (same enforcement pattern). This lets an OWNER set up
+/// (and revoke) an invitee's access before they've ever signed up: when the
+/// invite is accepted, acceptOrganizationInvite() migrates any grants
+/// pointing at it over to the newly created OrganizationMember, so nothing
+/// needs to be re-granted after enrollment. In practice this always targets
+/// a MEMBER-to-be, never an OWNER (an OWNER already has full access). A
+/// group grant is dynamic: mailboxes added to the group later are
+/// immediately covered, no new grant needed.
+model OrganizationMailboxGrant {
+  id                    String   @id @default(cuid())
+  organizationMemberId  String?
+  organizationInviteId  String?
+  mailboxId             String?
+  mailboxGroupId        String?
+  createdAt             DateTime @default(now())
+
+  member       OrganizationMember? @relation(fields: [organizationMemberId], references: [id], onDelete: Cascade)
+  invite       OrganizationInvite? @relation(fields: [organizationInviteId], references: [id], onDelete: Cascade)
+  mailbox      Mailbox?            @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  mailboxGroup MailboxGroup?       @relation(fields: [mailboxGroupId], references: [id], onDelete: Cascade)
+
+  // Postgres treats NULLs as distinct in a unique index, so these only ever
+  // dedupe the non-null side (a member/invite can't be granted the same
+  // mailbox, or the same group, twice) - exactly what we want.
+  @@unique([organizationMemberId, mailboxId])
+  @@unique([organizationMemberId, mailboxGroupId])
+  @@unique([organizationInviteId, mailboxId])
+  @@unique([organizationInviteId, mailboxGroupId])
+  @@map("organization_mailbox_grants")
+}
+
+/// Invitation to join an Organization as a MEMBER, sent by email from an
+/// OWNER. Separate from the platform-level Invite below: accepting one
+/// creates an OrganizationMember, never a User (see
+/// lib/actions/organization.ts for the "email has no User yet" limitation).
+model OrganizationInvite {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String
+  token          String    @unique
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// Access set up for this invitee before they've enrolled - migrated to
+  /// their OrganizationMember once accepted (see acceptOrganizationInvite()).
+  grants OrganizationMailboxGrant[]
+
+  @@map("organization_invites")
+}
+
+/// One-time invite link gating platform *account* creation (no open public
+/// signup). Redeemed at /signup?token=... to create a new User. Entirely
+/// independent from OrganizationInvite above: this controls who may have a
+/// User at all, not who belongs to which Organization.
+model Invite {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("invites")
+}
+
+/// OAuth 2.1 client, created via Dynamic Client Registration (RFC 7591).
+/// Tenant-agnostic by design, like a real OAuth app (e.g. "Claude"): the
+/// same client can be used by every user. What's scoped to a user is the
+/// *grant* (OAuthAuthorizationCode / OAuthRefreshToken), not the client
+/// itself.
+model OAuthClient {
+  id                      String   @id @default(cuid())
+  clientSecret            String?
+  clientName              String?
+  redirectUris            String[]
+  tokenEndpointAuthMethod String   @default("none")
+  createdAt               DateTime @default(now())
+
+  authorizationCodes OAuthAuthorizationCode[]
+  refreshTokens      OAuthRefreshToken[]
+
+  @@map("oauth_clients")
+}
+
+/// Short-lived, single-use authorization code (PKCE), exchanged for tokens
+/// at /api/oauth/token. Scoped to a userId (not a single mailbox): the
+/// resulting connector resolves the full set of mailboxes that user can
+/// access (own + org), exactly like the `mailbox` selector in
+/// lib/mcp/tools.ts expects - see lib/mail/mailbox.ts.
+model OAuthAuthorizationCode {
+  id                  String   @id @default(cuid())
+  code                String   @unique
+  clientId            String
+  userId              String
+  redirectUri         String
+  codeChallenge       String
+  codeChallengeMethod String   @default("S256")
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("oauth_authorization_codes")
+}
+
+/// Long-lived refresh token, used to mint new access tokens without
+/// re-running the authorize/consent flow. Revoking it (Réglages) is what
+/// "disconnecting an app" means.
+model OAuthRefreshToken {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  clientId   String
+  userId     String
+  expiresAt  DateTime
+  revoked    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("oauth_refresh_tokens")
+}

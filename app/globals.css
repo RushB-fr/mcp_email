@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Direction ported from public/design-proposal-v2.html (approved mockup,
+ * since deleted - see settings/* routes for where it landed). Primary is
+ * now near-black (was blue) - buttons stop competing with the one accent
+ * color, which is reserved for the settings sidebar's active nav item and
+ * the user avatar chip (see --ring below, reused rather than duplicated).
+ * --border/--input, previously equal, now carry the mockup's two distinct
+ * grays: a faint row-separator hairline vs. a more visible field/button
+ * border.
+ */
+@layer base {
+  :root {
+    --background: 220 25% 97%;
+    --foreground: 222 40% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 40% 11%;
+
+    --surface: 220 25% 97%;
+
+    --muted: 220 20% 94%;
+    --muted-foreground: 222 15% 38%;
+
+    /* #e5e7eb - faint hairline: row/list separators. */
+    --border: 220 13% 91%;
+    /* #d1d5db - stronger: inputs, selects, secondary/outline buttons. */
+    --input: 220 9% 83%;
+    /* Untouched by the v2 direction - still the one accent color, reused
+       (not duplicated) for the settings sidebar's active state. */
+    --ring: 217 91% 60%;
+
+    /* #0a0a0a - primary action color is near-black in v2, not blue. */
+    --primary: 0 0% 4%;
+    --primary-foreground: 0 0% 100%;
+
+    --accent: 220 20% 94%;
+    --accent-foreground: 222 40% 11%;
+
+    --destructive: 4 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 32%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 95% 42%;
+    --warning-foreground: 0 0% 100%;
+
+    /* 12px - matches v2's .card radius; buttons/inputs use the smaller
+       `sm` step derived from this (see tailwind.config.ts). */
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  /**
+   * Backdrop for the auth-flow "centered card" pages (login, signup,
+   * verify-email, org-invite/accept, oauth/authorize). Plain bg-surface
+   * read as a bare, unstyled form; two very soft primary-tinted glows keep
+   * it sober (this is an admin tool, not a landing page) while giving the
+   * card something to sit on.
+   */
+  .auth-backdrop {
+    background-color: hsl(var(--surface));
+    background-image: radial-gradient(circle at 12% 8%, hsl(var(--primary) / 0.10), transparent 42%),
+      radial-gradient(circle at 88% 92%, hsl(var(--primary) / 0.08), transparent 45%);
+  }
+}

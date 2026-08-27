@@ -1,0 +1,61 @@
+# Production deployment behind a shared Traefik instance. No ports are
+# published to the host: Traefik reaches the app container directly over an
+# external Docker network you already have Traefik attached to, and
+# terminates TLS itself.
+#
+# Requires DOMAIN and TRAEFIK_NETWORK to be set (see .env.example) - e.g.
+# DOMAIN=mail.yourdomain.fr and TRAEFIK_NETWORK=traefik, matching whatever
+# your Traefik setup already uses.
+#
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mcpemail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mcpemail}
+      POSTGRES_DB: ${POSTGRES_DB:-mcpemail}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mcpemail}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mcpemail}:${POSTGRES_PASSWORD:-mcpemail}@db:5432/${POSTGRES_DB:-mcpemail}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcpemail.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.mcpemail.entrypoints=websecure"
+      - "traefik.http.routers.mcpemail.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcpemail.loadbalancer.server.port=3000"
+
+networks:
+  default:
+  traefik:
+    name: ${TRAEFIK_NETWORK}
+    external: true
+
+volumes:
+  pgdata:
