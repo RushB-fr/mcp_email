@@ -4,7 +4,7 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)
 
-A self-hosted [MCP](https://modelcontextprotocol.io) server that lets an LLM (Claude, or any MCP-compatible client) read, search, and send email from a real IMAP/SMTP mailbox — with its own web UI for account and mailbox management.
+An [MCP](https://modelcontextprotocol.io) server that lets an LLM (Claude, or any MCP-compatible client) read, search, and send email from a real IMAP/SMTP mailbox — with its own web UI for account and mailbox management. Self-hostable today; a hosted version may also become available.
 
 ## Table of contents
 
@@ -12,7 +12,7 @@ A self-hosted [MCP](https://modelcontextprotocol.io) server that lets an LLM (Cl
 - [Features](#features)
 - [MCP tools](#mcp-tools)
 - [Architecture, in short](#architecture-in-short)
-- [Quick start (self-hosted, Docker)](#quick-start-self-hosted-docker)
+- [Quick start (Docker, self-hosted)](#quick-start-docker-self-hosted)
 - [Configuration reference](#configuration-reference)
 - [Creating the first account](#creating-the-first-account)
 - [Connecting an MCP client](#connecting-an-mcp-client)
@@ -22,7 +22,7 @@ A self-hosted [MCP](https://modelcontextprotocol.io) server that lets an LLM (Cl
 
 ## Why this exists
 
-Most "connect your email to an AI" tools either require OAuth with Gmail/Outlook specifically, or ask you to hand over your mailbox password to a third-party SaaS. This is meant to be the opposite: something you run yourself, on your own domain, against any IMAP/SMTP provider — the app never has to be trusted by anyone but you.
+Most "connect your email to an AI" tools require OAuth with Gmail/Outlook specifically. This works against any IMAP/SMTP provider instead, and can be self-hosted on your own domain if you'd rather not depend on anyone else's instance at all.
 
 ## Features
 
@@ -56,7 +56,7 @@ All tools accept an optional `mailbox` argument to target a specific accessible 
 
 Stack: Next.js 16 (App Router, Server Actions), Prisma + PostgreSQL, Auth.js v5, Tailwind CSS, Radix UI, `imapflow`/`nodemailer`/`mailparser` for the actual mail protocols.
 
-## Quick start (self-hosted, Docker)
+## Quick start (Docker, self-hosted)
 
 ```bash
 git clone https://github.com/RushB-fr/mcp_email.git
@@ -141,4 +141,4 @@ npm run lint
 
 ## License
 
-[PolyForm Shield 1.0.0](LICENSE) — free to use, modify, self-host, and use commercially, for any purpose **except** providing a product or service that competes with this project or with anything the licensor uses it to provide. This is **source-available, not OSI-approved open source** (OSI's definition requires allowing any use, including competing commercial use). Ask if you need different terms.
+[PolyForm Shield 1.0.0](LICENSE) — free to use, modify, self-host, and use commercially, for any purpose **except** providing a product or service that competes with this project or with anything the licensor uses it to provide (including a hosted/SaaS version of this same project, should one launch). This is **source-available, not OSI-approved open source** (OSI's definition requires allowing any use, including competing commercial use). Ask if you need different terms.
