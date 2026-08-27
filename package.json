@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "Self-hosted MCP server that lets an LLM (Claude, etc.) read, search, and send email from an IMAP/SMTP mailbox - with per-user identity, multi-mailbox support, and organization-based sharing.",
   "license": "PolyForm-Noncommercial-1.0.0",
-  "author": "rushb-fr",
+  "author": "RushB-fr",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rushb-fr/mcp_email.git"
+    "url": "https://github.com/RushB-fr/mcp_email.git"
   },
-  "homepage": "https://github.com/rushb-fr/mcp_email#readme",
+  "homepage": "https://github.com/RushB-fr/mcp_email#readme",
   "bugs": {
-    "url": "https://github.com/rushb-fr/mcp_email/issues"
+    "url": "https://github.com/RushB-fr/mcp_email/issues"
   },
   "private": true,
   "engines": {

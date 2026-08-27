@@ -28,7 +28,7 @@ Stack: Next.js 16 (App Router), Prisma + PostgreSQL, Auth.js v5, Tailwind, Radix
 ## Quick start (self-hosted, Docker)
 
 ```bash
-git clone https://github.com/rushb-fr/mcp_email.git
+git clone https://github.com/RushB-fr/mcp_email.git
 cd mcp_email
 cp .env.example .env
 ```
