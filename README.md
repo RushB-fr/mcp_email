@@ -1,29 +1,60 @@
 # Mail MCP
 
+[![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue.svg)](LICENSE)
+![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)
+![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)
+
 A self-hosted [MCP](https://modelcontextprotocol.io) server that lets an LLM (Claude, or any MCP-compatible client) read, search, and send email from a real IMAP/SMTP mailbox — with its own web UI for account and mailbox management.
 
-Tools exposed to the connected model:
+## Table of contents
 
-- `list_mailboxes` — every mailbox the current connector can act on
-- `list_folders` — folders in a mailbox (INBOX, Sent, ...)
-- `search_emails` — by sender, subject, body, unread-only, date range
-- `get_email` — full content of one message
-- `send_email` — send from the configured mailbox
-- `mark_as_read` — mark a message read/unread
+- [Why this exists](#why-this-exists)
+- [Features](#features)
+- [MCP tools](#mcp-tools)
+- [Architecture, in short](#architecture-in-short)
+- [Quick start (self-hosted, Docker)](#quick-start-self-hosted-docker)
+- [Configuration reference](#configuration-reference)
+- [Creating the first account](#creating-the-first-account)
+- [Connecting an MCP client](#connecting-an-mcp-client)
+- [Backups](#backups)
+- [Development](#development)
+- [License](#license)
 
 ## Why this exists
 
 Most "connect your email to an AI" tools either require OAuth with Gmail/Outlook specifically, or ask you to hand over your mailbox password to a third-party SaaS. This is meant to be the opposite: something you run yourself, on your own domain, against any IMAP/SMTP provider — the app never has to be trusted by anyone but you.
 
+## Features
+
+- **Bring your own mailbox** — any IMAP/SMTP provider, not locked to Gmail/Outlook. Credentials are tested live before being saved and encrypted at rest (AES-256-GCM).
+- **Identity decoupled from mailboxes** — sign up once (email/password, or Google/GitHub), attach as many mailboxes as you want afterwards. No mailbox required to have an account.
+- **Organizations** — share mailboxes across accounts with real access control (owner vs. member, per-mailbox or per-group grants), including granting access to an invite before it's even accepted.
+- **Two MCP auth modes** — a static per-account bearer token for simple clients, or full OAuth 2.1 with Dynamic Client Registration + PKCE for clients like a Claude custom connector.
+- **Bilingual UI** — French/English, switchable per session via a cookie.
+- **Invite-gated signup** — closed by default, no open public registration; you control who gets an account.
+- **Self-healing login** — if you rotate a mailbox's password at your provider, the next login re-validates and re-encrypts it automatically instead of locking you out.
+
+## MCP tools
+
+| Tool | Description |
+| --- | --- |
+| `list_mailboxes` | Every mailbox the current connector can act on (own + shared via an organization) |
+| `list_folders` | Folders in a mailbox (INBOX, Sent, ...) |
+| `search_emails` | By sender, subject, body substring, unread-only, date range |
+| `get_email` | Full content of one message by UID |
+| `send_email` | Send from the configured mailbox |
+| `mark_as_read` | Mark a message read or unread |
+
+All tools accept an optional `mailbox` argument to target a specific accessible mailbox; omitted, they use the account's default.
+
 ## Architecture, in short
 
-- **Identity is decoupled from mailboxes.** A `User` is just an account (email + password, or Google/GitHub sign-in) — it owns zero or more `Mailbox` rows (IMAP/SMTP credentials, tested live before being saved). Logging in doesn't require having a mailbox attached yet, and one account can hold several mailboxes.
-- **Organizations let mailboxes be shared** between accounts with real access control: an `OWNER` has full access to everything shared in the org; a `MEMBER` only sees what's explicitly granted, mailbox by mailbox or via a named group of mailboxes. Access can be granted to an invite before it's even accepted.
-- **Two ways for an MCP client to authenticate**: a static per-account bearer token (simplest, paste the URL + token into any MCP client), or a full OAuth 2.1 flow with Dynamic Client Registration and PKCE (what a "Claude" custom connector uses). Either way, the connector resolves the account's full accessible set of mailboxes — its own plus anything shared with it.
-- **Bilingual UI** (French/English), a simple cookie-based switch, no accounts or content translated beyond the app chrome itself.
-- Platform signup is **invite-gated** — there's no open public registration. See [Creating the first account](#creating-the-first-account) below.
+- **`User`** — an identity: email + password (bcrypt) or Google/GitHub sign-in. Owns zero or more mailboxes and holds the account-level MCP bearer token.
+- **`Mailbox`** — one IMAP/SMTP connection, owned by a `User`, tested live on attach. Two different accounts can each attach the same real-world address if they each hold working credentials for it.
+- **`Organization`** — a group of `User`s sharing mailboxes. An `OWNER` gets full access to everything shared in the org automatically; a `MEMBER` only gets what's explicitly granted — one mailbox at a time, or dynamically via a named `MailboxGroup` (mailboxes added to the group later are covered immediately, no new grant needed). Access can be pre-configured for an invited email before they've even created an account, and migrates automatically once they accept.
+- **MCP auth** — a bearer token (static, one per account, from Réglages > Applications) or an OAuth 2.1 access token (Dynamic Client Registration + PKCE, revocable independently of the JWT's own expiry) both resolve to the same thing: the account's full accessible mailbox set.
 
-Stack: Next.js 16 (App Router), Prisma + PostgreSQL, Auth.js v5, Tailwind, Radix UI.
+Stack: Next.js 16 (App Router, Server Actions), Prisma + PostgreSQL, Auth.js v5, Tailwind CSS, Radix UI, `imapflow`/`nodemailer`/`mailparser` for the actual mail protocols.
 
 ## Quick start (self-hosted, Docker)
 
@@ -39,19 +70,38 @@ Fill in `.env` — at minimum:
 - `AUTH_SECRET` and `MCP_MASTER_KEY` (each: `openssl rand -base64 32`)
 - `APP_BASE_URL` (the public URL this instance will be reachable at)
 
-Everything else in `.env.example` is documented inline and either has a sane default or is optional (Google/GitHub sign-in, transactional email for signup verification and org invites).
+Everything else in `.env.example` is documented inline with a sane default or is optional. See the [configuration reference](#configuration-reference) below.
 
-Then, for a local/dev instance (publishes a port, no reverse proxy):
+For a local/dev instance (publishes a port, no reverse proxy):
 
 ```bash
 docker compose up -d --build
 ```
 
-Or, behind an existing Traefik instance (no ports published, routed by domain — set `DOMAIN` and `TRAEFIK_NETWORK` in `.env` first):
+Or behind an existing Traefik instance (no ports published, routed by domain — set `DOMAIN` and `TRAEFIK_NETWORK` in `.env` first):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+Either way, migrations run automatically on container start.
+
+## Configuration reference
+
+Full details and inline comments live in [`.env.example`](.env.example) — this is a summary.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | Postgres credentials, shared by `DATABASE_URL` |
+| `AUTH_SECRET` | Yes | Signs sessions and (by default) OAuth access tokens |
+| `MCP_MASTER_KEY` | Yes | Encrypts mailbox passwords at rest — deliberately separate from `AUTH_SECRET` |
+| `APP_BASE_URL` | Recommended | Public URL; required for links in transactional emails (never falls back to a client-supplied header for those) |
+| `AUTH_TRUST_HOST` | Behind a reverse proxy | Lets Auth.js trust `X-Forwarded-*` headers |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional | Adds "Sign in with Google" as a second login method for an existing account |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Optional | Same, for GitHub |
+| `SMTP_FROM_*` | Optional | The platform's own outgoing address for signup verification and org-invite emails — unrelated to any user's mailbox |
+| `DOMAIN` / `TRAEFIK_NETWORK` | `docker-compose.prod.yml` only | Domain Traefik routes to this app, and the external network your Traefik is attached to |
+| `APP_PORT` | `docker-compose.yml` (local) only | Host port to expose |
 
 ## Creating the first account
 
@@ -61,7 +111,7 @@ Signup is invite-gated. Generate an invite from inside the running container:
 docker compose exec app npx tsx scripts/create-invite.ts
 ```
 
-This prints a one-time signup link, valid for 7 days. Redeeming it creates a `User` (just email + password, or you can sign in with Google/GitHub afterwards if configured) — no mailbox yet. Once logged in, attach a mailbox from Réglages: its IMAP/SMTP credentials are tested live before being saved, and that's the only proof of ownership required.
+This prints a one-time signup link, valid for 7 days. Redeeming it creates a `User` (email + password, or sign in with Google/GitHub afterwards if configured) — no mailbox yet. Once logged in, attach a mailbox from Réglages: its IMAP/SMTP credentials are tested live before being saved, which is the only proof of ownership required.
 
 ## Connecting an MCP client
 
@@ -78,7 +128,7 @@ Both resolve to the same account and the same set of accessible mailboxes.
 ./scripts/backup.sh
 ```
 
-Dumps the Postgres database to `backups/` (gitignored — it contains real user data). Run it before any schema migration; see `prisma/migrations/` for how this project handles migrations that need a data backfill (additive migration → script → follow-up migration, never a single destructive step against live data).
+Dumps the Postgres database to `backups/` (gitignored — it contains real user data). Run it before any schema migration; see `prisma/migrations/` for how this project handles migrations that need a data backfill (additive migration → data script → follow-up migration, never a single destructive step against live data).
 
 ## Development
 
@@ -91,4 +141,4 @@ npm run lint
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free to use, modify, and self-host for any noncommercial purpose. This is **source-available, not OSI-approved open source**: commercial use or redistribution isn't covered by this license. Ask if you need different terms.
+[PolyForm Shield 1.0.0](LICENSE) — free to use, modify, self-host, and use commercially, for any purpose **except** providing a product or service that competes with this project or with anything the licensor uses it to provide. This is **source-available, not OSI-approved open source** (OSI's definition requires allowing any use, including competing commercial use). Ask if you need different terms.

@@ -2,7 +2,7 @@
   "name": "mcp-email",
   "version": "1.0.0",
   "description": "Self-hosted MCP server that lets an LLM (Claude, etc.) read, search, and send email from an IMAP/SMTP mailbox - with per-user identity, multi-mailbox support, and organization-based sharing.",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "RushB-fr",
   "repository": {
     "type": "git",
