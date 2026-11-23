@@ -42,7 +42,7 @@ Most "connect your email to an AI" tools require OAuth with Gmail/Outlook specif
 | `list_folders` | Folders in a mailbox (INBOX, Sent, ...) |
 | `search_emails` | By sender, subject, body substring, unread-only, date range |
 | `get_email` | Full content of one message by UID |
-| `send_email` | Send from the configured mailbox |
+| `send_email` | Send from the configured mailbox and file a copy in its Sent folder |
 | `mark_as_read` | Mark a message read or unread |
 
 All tools accept an optional `mailbox` argument to target a specific accessible mailbox; omitted, they use the account's default.

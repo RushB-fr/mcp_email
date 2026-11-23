@@ -54,6 +54,25 @@ export async function listFolders(account: MailboxConfig): Promise<string[]> {
   }
 }
 
+/**
+ * Files a copy of a sent mail in the mailbox's Sent folder. The folder is the one the server
+ * flags as \Sent, else the first whose name ends in "Sent" (providers differ: "Sent",
+ * "INBOX.Sent", "INBOX.INBOX.Sent"). Throws when there is none: the caller decides what that means.
+ */
+export async function appendToSent(account: MailboxConfig, raw: Buffer, date: Date): Promise<void> {
+  const client = await getConnectedClient(account);
+  try {
+    const folders = await client.list();
+    const sent =
+      folders.find((folder) => folder.specialUse === "\\Sent") ??
+      folders.find((folder) => /(^|[./])sent$/i.test(folder.path));
+    if (!sent) throw new Error("no Sent folder found");
+    await client.append(sent.path, raw, ["\\Seen"], date);
+  } finally {
+    await client.logout();
+  }
+}
+
 export async function searchEmails(
   account: MailboxConfig,
   args: {
